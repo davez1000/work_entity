@@ -1,0 +1,13 @@
+name = Work
+description = Provides an entity to store work different work bundles.
+core = 7.x
+package = Core platform
+files[] = work.module
+files[] = work.pages.inc
+files[] = work.admin.inc
+files[] = work.install
+files[] = work.controller.inc
+dependencies[] = field_ui
+dependencies[] = entity
+dependencies[] = taxonomy
+

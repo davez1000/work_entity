@@ -1,0 +1,272 @@
+<?php
+
+function work_schema() {
+  // main table for storing work entities
+  $schema['work'] = array(
+    'description' => 'The base table for works.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'The primary identifier for an work.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'vid' => array(
+        'description' => 'The current {work_revision}.vid version identifier.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'priref' => array(
+        'description' => 'The priref field from CID.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'webid' => array(
+        'description' => 'The web identifier for this entity.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'type' => array(
+        'description' => 'The {work_type} of this work.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'title' => array(
+        'description' => 'The title of this work.',
+        'type' => 'varchar',
+        'length' => 1024,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'alpha_title' => array(
+        'description' => 'The title with the article removed, used for alphabetic sorting.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'production_date' => array(
+        'description' => 'The date of production.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the work was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the work was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'unique keys' => array(
+      'id_vid' => array('id', 'vid'),
+      'id'     => array('id')
+      ),
+    'primary key' => array('id'),
+    'indexes' => array(
+      'webid' => array('webid'),
+    ),
+  );
+  
+  // table for revisions
+  $schema['work_revision'] = array(
+    'description' => 'Stores information about each saved version of an {work}.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'The {work} this version belongs to.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'vid' => array(
+        'description' => 'The primary identifier for this version.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'priref' => array(
+        'description' => 'The priref field from CID.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'webid' => array(
+        'description' => 'The web identifier for this entity.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'title' => array(
+        'description' => 'The title of this version.',
+        'type' => 'varchar',
+        'length' => 1024,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'alpha_title' => array(
+        'description' => 'The title with the article removed, used for alphabetic sorting.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'production_date' => array(
+        'description' => 'The date of production.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the work was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'id' => array('id'),
+      'webid' => array('webid'),
+    ),
+    'primary key' => array('vid'),
+    'foreign keys' => array(
+      'work' => array(
+        'table' => 'work',
+        'columns' => array(
+          'id' => 'id',
+        ),
+      ),
+    ),
+  );
+
+  // main table for storing work entity alternative titles
+  $schema['work_title'] = array(
+    'description' => 'The base table for work alternative titles.',
+    'fields' => array(
+      'wtid' => array(
+        'description' => 'The primary identifier for an work title.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'id' => array(
+        'description' => 'The primary identifier for the work.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The {work_type} of this work.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'title' => array(
+        'description' => 'The title of this work.',
+        'type' => 'varchar',
+        'length' => 1024,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'primary key' => array('wtid'),
+    'foreign keys' => array(
+      'work' => array(
+        'table' => 'work',
+        'columns' => array(
+          'id' => 'id',
+        ),
+      ),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Function to create the vocabularies defined by the module.
+ */
+function _work_install_taxonomy_vocabularies() {
+  
+  $vocabulary_names = array(
+    'subject' => 'Subject',
+    'cid_genre' => 'CID Genre',
+  );
+
+  foreach ($vocabulary_names as $vocabulary_machine_name => $vocabulary_name) {
+    $vocabulary = taxonomy_vocabulary_machine_name_load($vocabulary_machine_name);
+    if (!$vocabulary) {
+      $edit = array(
+        'name' => t('!name', array('!name' => $vocabulary_name)),
+        'machine_name' => $vocabulary_machine_name,
+        'description' => t('The !name vocabulary', array('!name' => $vocabulary_machine_name)),
+        'hierarchy' => 1,
+        'module' => 'work',
+        'weight' => -10,
+      );
+      $vocabulary = (object) $edit;
+      taxonomy_vocabulary_save($vocabulary);
+    }
+  }
+
+}
+
+/**
+ * Implements hook_install().
+ * 
+ * Creates all the vocabularies that the categories module defines and, where
+ * appropriate, installs a set of predefined terms.
+ */
+function work_install() {  
+  _work_install_taxonomy_vocabularies();
+}
+
+
+/**
+ * Implements hook_uninstall().
+ *
+ * Removes all vocabs defined by the module.
+ */
+function work_uninstall() {
+  $vocabulary_names = array(
+    'subject',
+    'cid_genre',
+  );
+
+  $vocabularies = taxonomy_get_vocabularies();  
+  foreach ($vocabularies as $vocabulary) {
+    foreach ($vocabulary_names as $vocabulary_name) {
+      if ($vocabulary->machine_name == $vocabulary_name) {
+        $sql = 'SELECT tid FROM {taxonomy_term_data} ttd WHERE ttd.vid = :vid';
+        $result = db_query($sql, array(':vid' => $vocabulary->vid));
+        $terms = array();
+        foreach ($result as $row) {
+          $terms[$row->tid] = taxonomy_term_load($row->tid);
+        }        
+        
+        taxonomy_vocabulary_delete($vocabulary->vid);
+        
+        field_purge_batch(1000);
+      }
+    }
+  }
+}

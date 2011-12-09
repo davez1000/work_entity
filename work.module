@@ -1,0 +1,387 @@
+<?php
+
+/**
+ * Implements hook_entity_info().
+ */
+function work_entity_info() {
+  $return['work'] = array(
+    'label' => t('Work entity'),
+    'controller class' => 'workController',
+    'base table' => 'work',
+    'revision table' => 'work_revision',
+    'uri callback' => 'work_uri',
+    'fieldable' => TRUE,
+    'entity keys' => array(
+      'id' => 'id',
+      'revision' => 'vid',
+      'bundle' => 'type',
+      'label' => 'title',
+     ),
+    'bundle keys' => array(
+      'bundle' => 'type',
+    ),
+    'static cache' => TRUE,
+    'bundles' => array(),
+    'view modes' => array(
+      'full' => array(
+        'label' => t('Full content'),
+        'custom settings' => FALSE,
+      ),
+      'teaser' => array(
+        'label' => t('Teaser'),
+        'custom settings' => FALSE,
+      ),
+    ),
+  );
+
+  foreach (work_types() as $type => $info) {
+    $return['work']['bundles'][$type] = array(
+      'label' => $info->name,
+      'admin' => array(
+        'path' => 'admin/structure/works/manage/%work_type',
+        'real path' => 'admin/structure/works/manage/' . str_replace('_', '-', $type),
+        'bundle argument' => 4,
+        'access arguments' => array('administer work entities'),
+      ),
+    );
+  }
+
+  return $return;
+}
+
+/**
+ * Entity uri callback.
+ */
+function work_uri($work) {
+  return array(
+    'path' => 'work/' . $work->id,
+  );
+}
+
+/**
+ * Implements hook_fied_extra_fields().
+ */
+function work_field_extra_fields() {
+  $extra = array();
+
+  foreach (work_types() as $type) {
+    $extra['work'][$type->type] = array(
+      'form' => array(
+        'title' => array(
+          'label' => t('Title'),
+          'description' => t('The name of the work'),
+          'weight' => -5,
+        ),
+      ),
+      'display' => array(
+        'title' => array(
+          'label' => t('Title'),
+          'description' => t('The name of the work'),
+          'weight' => -5,
+        ),
+      ),
+    );
+  }
+
+  return $extra;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function work_permission() {
+  return array(
+    'administer works' =>  array(
+      'title' => t('Administer work entities'),
+    ),
+    'create works' =>  array(
+      'title' => t('Create work entities'),
+    ),
+    'update works' =>  array(
+      'title' => t('Update work entities'),
+    ),
+    'view works' =>  array(
+      'title' => t('View work entities'),
+    ),
+    'delete works' =>  array(
+      'title' => t('Delete work entities'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function work_menu() {
+  $items['admin/structure/works'] = array(
+    'title' => 'Manage works',
+    'description' => 'Manage works.',
+    'page callback' => 'work_overview_types',
+    'access arguments' => array('administer work entities'),
+    'file' => 'work.admin.inc',
+  );
+  $items['admin/structure/works/manage/%work_type'] = array(
+    'title' => 'View work type',
+    'title callback' => 'work_type_page_title',
+    'title arguments' => array(4),
+    'page callback' => 'work_information',
+    'page arguments' => array(4),
+    'access arguments' => array('administer work entities'),
+    'file' => 'work.admin.inc',
+  );
+  $items['admin/structure/works/manage/%work_type/view'] = array(
+    'title' => 'View',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+
+  $items['work/add'] = array(
+    'title' => 'Add new work',
+    'page callback' => 'work_add_page',
+    'access arguments' => array('create work entities'),
+    'weight' => 1,
+    'menu_name' => 'management',
+    'file' => 'work.pages.inc',
+  );
+  foreach (work_types() as $type) {
+    $type_url_str = str_replace('_', '-', $type->type);
+    $items['work/add/' . $type_url_str] = array(
+      'title' => $type->name,
+      'title callback' => 'check_plain',
+      'page callback' => 'work_add',
+      'page arguments' => array(2),
+      'access arguments' => array('create work entities'),
+      'description' => $type->description,
+      'file' => 'work.pages.inc',
+    );
+  }
+  $items['work/%work'] = array(
+    'title callback' => 'work_page_title',
+    'title arguments' => array(1),
+    'page callback' => 'work_page_view',
+    'page arguments' => array(1),
+    'access arguments' => array('view work entities'),
+    'type' => MENU_CALLBACK,
+    'file' => 'work.pages.inc',
+  );
+  $items['work/%work/view'] = array(
+    'title' => 'View',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  $items['work/%work/edit'] = array(
+    'title' => 'Edit',
+    'page callback' => 'work_page_edit',
+    'page arguments' => array(1),
+    'access arguments' => array('update work entities'),
+    'weight' => 0,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+    'file' => 'work.pages.inc',
+  );
+  $items['work/%work/delete'] = array(
+    'title' => 'Delete',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('work_delete_confirm', 1),
+    'access arguments' => array('delete work entities'),
+    'weight' => 1,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_INLINE,
+    'file' => 'work.pages.inc',
+  );
+  $items['work/recent'] = array(
+    'title' => 'Recently added works',
+    'page callback' => 'work_page_list_recent',
+    'access arguments' => array('view work entities'),
+    'file' => 'work.pages.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Sets the page title based on the specified work.
+ *
+ * @param $work
+ *   The work object.
+ */
+function work_page_title($work) {
+  return $work->title;
+}
+
+/**
+ * Implements hook_forms().
+ *
+ * All work forms share the same form handler.
+ */
+function work_forms() {
+  $forms = array();
+  $types = work_types();
+  if ($types) {
+    foreach (array_keys($types) as $type) {
+      $forms[$type . '_work_form']['callback'] = 'work_form';
+    }
+  }
+  return $forms;
+}
+
+/**
+ * Get a list of all work types available.
+ *
+ * Usually this would be more full-featured.
+ *
+ * @return array
+ *   An array of work type objects. Note that the "type" key matches what
+ *   was defined as the main key in hook_entity_info().
+ */
+function work_types() {
+  $types = &drupal_static(__FUNCTION__);
+
+  if (empty($types)) {
+    $types['tv'] = (object) array(
+      'type' => 'tv',
+      'name' => t('TV'),
+      'description' => t('Television.')
+    );
+    $types['film'] = (object) array(
+      'type' => 'film',
+      'name' => t('Film'),
+      'description' => t('Film.')
+    );
+  }
+  return $types;
+}
+
+/**
+ * Menu title callback.
+ *
+ * @param $type
+ *   The work type.
+ * @return string
+ *   The human-friendly name of the work type.
+ */
+function work_type_page_title($type) {
+  return t('Manage @type', array('@type' => $type->name));
+}
+
+/**
+ * Get an individual work type definition object.
+ *
+ * @param $type
+ *   The key of the work type we want.
+ * @return object
+ *   The specified work type.
+ */
+function work_type_load($type) {
+  $types = work_types();
+  $type = str_replace('-', '_', $type);
+  return isset($types[$type]) ? $types[$type] : FALSE;
+}
+
+/**
+ * Load work entities from the database.
+ *
+ * This function should be used whenever you need to load more than one work
+ * from the database. works are loaded into memory and will not require
+ * database access if loaded again during the same page request.
+ *
+ * @see entity_load()
+ *
+ * @param $ids
+ *   An array of work IDs.
+ * @param $conditions
+ *   An array of conditions on the {work} table in the form 'field' => $value.
+ * @param $reset
+ *   Whether to reset the internal entity_load cache.
+ *
+ * @return
+ *   An array of node objects indexed by nid.
+ */
+function work_load_multiple($ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('work', $ids, $conditions, $reset);
+}
+
+/**
+ * Load an work object from the database.
+ *
+ * @param $id
+ *   The work ID.
+ * @param $vid
+ *   The revision ID.
+ * @param $reset
+ *   Whether to reset the work_load_multiple cache.
+ *
+ * @return
+ *   A fully-populated node object.
+ */
+function work_load($id = NULL, $vid = NULL, $reset = FALSE) {
+  $ids = (isset($id) ? array($id) : array());
+  $conditions = (isset($vid) ? array('vid' => $vid) : array());
+  $work = work_load_multiple($ids, $conditions, $reset);
+  return $work ? reset($work) : FALSE;
+}
+
+/**
+ * Save an work.
+ *
+ * @param $work
+ *   The work to be saved.
+ * @return
+ *   The saved work, now with an aid if necessary.
+ */
+function work_save($work) {
+  return entity_get_controller('work')->save($work);
+}
+
+/**
+ * Returns an initialized work object.
+ *
+ * @param $type
+ *   The machine-readable type of the work.
+ *
+ * @return
+ *   An work object with all default fields initialized.
+ */
+function work_new($type = '') {
+  return entity_get_controller('work')->create($type);
+}
+
+
+/**
+ * Deletes an work by ID.
+ *
+ * @param $id
+ *   The ID of the product to delete.
+ *
+ * @return
+ *   TRUE on success, FALSE otherwise.
+ */
+function work_delete($id) {
+  return work_delete_multiple(array($id));
+}
+
+/**
+ * Deletes multiple works by ID.
+ *
+ * @param $ids
+ *   An array of work IDs to delete.
+ *
+ * @return
+ *   TRUE on success, FALSE otherwise.
+ */
+function work_delete_multiple($ids) {
+  return entity_get_controller('work')->delete($ids);
+}
+
+
+
+/**
+ * Implements hook_theme()
+ */
+function work_theme($existing, $type, $theme, $path) {
+  return array(
+    'work' => array(
+      'variables' => array('element' => null),
+      'template' => 'work'
+    ),
+  );
+}
