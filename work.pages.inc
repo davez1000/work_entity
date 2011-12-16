@@ -233,6 +233,17 @@ function work_page_view($work, $view_mode = 'full') {
     }
     
     
+    // relations
+    $relations = module_invoke('relation_helper', 'get_endpoints', $work->id);
+    if (!empty($relations)) {
+      $i = 0;
+      foreach($relations as $relation) {
+        foreach($relation['entity'] as $relation_entity) {
+          $work->content['relations'][$relation['entity_type']][$i] = l($relation_entity->title, $relation['entity_type'] . '/' . $relation_entity->id);
+        }
+        $i++;
+      }
+    }
   }
 
   // Build fields content.

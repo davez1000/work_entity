@@ -40,3 +40,25 @@
   </div>
 <?php endif; ?>
 
+  
+  
+<!-- related works and agents -->
+<?php if (!empty($content['relations']['work'])): ?>
+  <div><h3>Related Works</h3></div>
+  <div>
+  <?php foreach($content['relations']['work'] as $relation): ?>
+    <?php echo $relation; ?><br />
+  <?php endforeach; ?>
+  </div>
+<?php endif; ?>
+
+<?php if (!empty($content['relations']['agent'])): ?>
+  <div><h3>Related Agents</h3></div>
+  <div>
+  <?php foreach($content['relations']['agent'] as $relation): ?>
+    <?php echo $relation; ?><br />
+  <?php endforeach; ?>
+  </div>
+<?php endif; ?>
+
+
