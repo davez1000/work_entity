@@ -18,20 +18,6 @@ function work_schema() {
         'not null' => TRUE,
         'default' => 0,
       ),
-      'priref' => array(
-        'description' => 'The priref field from CID.',
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-      ),
-      'webid' => array(
-        'description' => 'The web identifier for this entity.',
-        'type' => 'varchar',
-        'length' => 32,
-        'not null' => TRUE,
-        'default' => '',
-      ),
       'type' => array(
         'description' => 'The {work_type} of this work.',
         'type' => 'varchar',
@@ -39,11 +25,25 @@ function work_schema() {
         'not null' => TRUE,
         'default' => '',
       ),
+      'enhanced' => array(
+        'description' => 'Flag to indicate if the work has been enhanced in drupal, or contains only CID data.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
       'title' => array(
         'description' => 'The title of this work.',
         'type' => 'varchar',
         'length' => 1024,
         'not null' => TRUE,
+        'default' => '',
+      ),
+      'identifying_title' => array(
+        'description' => 'The identifying title from BID/CID (reference only).',
+        'type'  => 'varchar',
+        'length' => 1024,
+        'not null' => FALSE,
         'default' => '',
       ),
       'alpha_title' => array(
@@ -78,9 +78,6 @@ function work_schema() {
       'id'     => array('id')
       ),
     'primary key' => array('id'),
-    'indexes' => array(
-      'webid' => array('webid'),
-    ),
   );
   
   // table for revisions
@@ -100,25 +97,32 @@ function work_schema() {
         'unsigned' => TRUE,
         'not null' => TRUE,
       ),
-      'priref' => array(
-        'description' => 'The priref field from CID.',
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-      ),
-      'webid' => array(
-        'description' => 'The web identifier for this entity.',
+      'type' => array(
+        'description' => 'The {work_type} of this work.',
         'type' => 'varchar',
         'length' => 32,
         'not null' => TRUE,
         'default' => '',
+      ),
+      'enhanced' => array(
+        'description' => 'Flag to indicate if the work has been enhanced in drupal, or contains only CID data.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
       ),
       'title' => array(
         'description' => 'The title of this version.',
         'type' => 'varchar',
         'length' => 1024,
         'not null' => TRUE,
+        'default' => '',
+      ),
+      'identifying_title' => array(
+        'description' => 'The identifying title from BID/CID (reference only).',
+        'type'  => 'varchar',
+        'length' => 1024,
+        'not null' => FALSE,
         'default' => '',
       ),
       'alpha_title' => array(
@@ -141,10 +145,15 @@ function work_schema() {
         'not null' => TRUE,
         'default' => 0,
       ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the work was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
     ),
     'indexes' => array(
       'id' => array('id'),
-      'webid' => array('webid'),
     ),
     'primary key' => array('vid'),
     'foreign keys' => array(
@@ -236,8 +245,10 @@ function _work_install_taxonomy_vocabularies() {
  * Creates all the vocabularies that the categories module defines and, where
  * appropriate, installs a set of predefined terms.
  */
-function work_install() {  
+function work_install() {
   _work_install_taxonomy_vocabularies();
+  // install additional fields for work entity
+  _work_install_instances();
 }
 
 
@@ -267,6 +278,156 @@ function work_uninstall() {
         
         field_purge_batch(1000);
       }
+    }
+  }
+}
+
+
+/**
+ * Install additional fields for the work entity
+ */
+function _work_install_instances() {
+  $t = get_t();
+  // Define instances for this entity type. The fields are declared in field_definitions.install
+  $instances = array(
+    'introduction' => array(
+      'field_name'  => 'introduction',
+      'label'       => $t('Introduction'),
+      'cardinality' => 1,
+      'type'        => 'text_with_summary',
+      'settings'    => array('display_summary' => TRUE),
+      'widget'      => array(
+        'type'      => 'text_summary_or_trimmed',
+      ),
+    ),
+    'synopsis' => array(
+      'field_name' => 'synopsis',
+      'label' => $t('Synopsis'),
+      'cardinality' => 1,
+      'settings' => array(
+        'text_processing' => 1,
+      ),
+      'widget'      => array(
+        'type'       => 'text_textarea',
+        'settings'   => array('rows' => 5),
+      ),
+    ),
+    'external_link' => array(
+      'default_value' => NULL,
+      'deleted' => '0',
+      'description' => '',
+      'display' => array(
+        'default' => array(
+          'label' => 'above',
+          'module' => 'link',
+          'settings' => array(),
+          'type' => 'default',
+          'weight' => 14,
+        ),
+        'teaser' => array(
+          'label' => 'above',
+          'settings' => array(),
+          'type' => 'hidden',
+          'weight' => 0,
+        ),
+      ),
+      'field_name' => 'external_link',
+      'label' => 'External link',
+      'required' => 0,
+      'settings' => array(
+        'attributes' => array(
+          'class' => '',
+          'rel' => '',
+          'target' => 'default',
+        ),
+        'display' => array(
+          'url_cutoff' => '80',
+        ),
+        'enable_tokens' => 1,
+        'title' => 'optional',
+        'title_value' => '',
+        'url' => 0,
+        'user_register_form' => FALSE,
+      ),
+      'widget' => array(
+        'active' => 0,
+        'module' => 'link',
+        'settings' => array(),
+        'type' => 'link_field',
+        'weight' => '12',
+      ),
+    ),
+    'one_liner' => array(
+      'field_name'  => 'one_liner',
+      'label' => $t('One liner'),
+      'description' => $t('One liner summary field'),
+      'cardinality' => 1,
+      'type'        => 'text',
+      'widget'      => array(
+        'type'    => 'text_textfield',
+      ),
+    ),
+    'primary_image' => array(
+      'field_name' => 'primary_image',
+      'label' => $t('Primary image'),
+      'description' => $t('A primary image for the work.'),
+      'cardinality' => 1,
+      'type' => 'primary_image',
+      'settings' => array(
+        'alt_field' => 1,
+        'file_directory' => 'image',
+        'file_extensions' => 'png gif jpg jpeg',
+        'max_filesize' => '',
+        'max_resolution' => '',
+        'min_resolution' => '',
+        'title_field' => 1,
+        'user_register_form' => FALSE,
+      ),
+      'widget' => array(
+        'settings' => array(
+          'preview_image_style' => 'thumbnail',
+          'progress_indicator' => 'throbber',
+        ),
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'image',
+          'settings' => array('image_style' => 'large', 'image_link' => ''),
+          'weight' => -1,
+        ),
+        'teaser' => array(
+          'label' => 'hidden',
+          'type' => 'image',
+          'settings' => array('image_style' => 'medium', 'image_link' => 'content'),
+          'weight' => -1,
+        ),
+      ),
+    ),
+    'year_term' => array(
+      'field_name' => 'year_term',
+      'label' => $t('Year tag'),
+      'required'    => FALSE,
+      'cardinality' => 1,
+      'widget' => array(
+        'type' => 'options_select',
+      ),
+    ),
+    'work_category' => array(
+      'field_name' => 'work_category',
+      'label' => $t('Category'),
+      'required'    => TRUE,
+      'cardinality' => 1,
+      'widget' => array(
+        'type' => 'options_select',
+      ),
+    ),
+  );
+  foreach ($instances as $instance) {
+    $instance['entity_type'] = 'work';
+    foreach(array_keys(work_types()) as $work_bundle) {
+      $instance['bundle'] = $work_bundle;
+      field_create_instance($instance);
     }
   }
 }

@@ -59,7 +59,21 @@ function work_uri($work) {
 }
 
 /**
- * Implements hook_fied_extra_fields().
+ * Implement idents_path_info hook.
+ *
+ * Register the work module with the idents module.
+ */
+function work_idents_path_info() {
+  $paths = array(
+    'work/' => array(
+      'description' => 'Work Path'
+    ),
+  );
+  return $paths;
+}
+
+/**
+ * Implements hook_field_extra_fields().
  */
 function work_field_extra_fields() {
   $extra = array();
@@ -117,7 +131,7 @@ function work_menu() {
     'title' => 'Manage works',
     'description' => 'Manage works.',
     'page callback' => 'work_overview_types',
-    'access arguments' => array('administer work entities'),
+    'access arguments' => array('administer works'),
     'file' => 'work.admin.inc',
   );
   $items['admin/structure/works/manage/%work_type'] = array(
@@ -126,7 +140,7 @@ function work_menu() {
     'title arguments' => array(4),
     'page callback' => 'work_information',
     'page arguments' => array(4),
-    'access arguments' => array('administer work entities'),
+    'access arguments' => array('administer works'),
     'file' => 'work.admin.inc',
   );
   $items['admin/structure/works/manage/%work_type/view'] = array(
@@ -137,7 +151,7 @@ function work_menu() {
   $items['work/add'] = array(
     'title' => 'Add new work',
     'page callback' => 'work_add_page',
-    'access arguments' => array('create work entities'),
+    'access arguments' => array('create works'),
     'weight' => 1,
     'menu_name' => 'management',
     'file' => 'work.pages.inc',
@@ -149,7 +163,7 @@ function work_menu() {
       'title callback' => 'check_plain',
       'page callback' => 'work_add',
       'page arguments' => array(2),
-      'access arguments' => array('create work entities'),
+      'access arguments' => array('create works'),
       'description' => $type->description,
       'file' => 'work.pages.inc',
     );
@@ -159,7 +173,7 @@ function work_menu() {
     'title arguments' => array(1),
     'page callback' => 'work_page_view',
     'page arguments' => array(1),
-    'access arguments' => array('view work entities'),
+    'access arguments' => array('view works'),
     'type' => MENU_CALLBACK,
     'file' => 'work.pages.inc',
   );
@@ -172,7 +186,7 @@ function work_menu() {
     'title' => 'Edit',
     'page callback' => 'work_page_edit',
     'page arguments' => array(1),
-    'access arguments' => array('update work entities'),
+    'access arguments' => array('update works'),
     'weight' => 0,
     'type' => MENU_LOCAL_TASK,
     'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
@@ -182,7 +196,7 @@ function work_menu() {
     'title' => 'Delete',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('work_delete_confirm', 1),
-    'access arguments' => array('delete work entities'),
+    'access arguments' => array('delete works'),
     'weight' => 1,
     'type' => MENU_LOCAL_TASK,
     'context' => MENU_CONTEXT_INLINE,
@@ -191,7 +205,13 @@ function work_menu() {
   $items['work/recent'] = array(
     'title' => 'Recently added works',
     'page callback' => 'work_page_list_recent',
-    'access arguments' => array('view work entities'),
+    'access arguments' => array('view works'),
+    'file' => 'work.pages.inc',
+  );
+  $items['work/list'] = array(
+    'title' => 'List works',
+    'page callback' => 'work_page_list',
+    'access arguments' => array('view works'),
     'file' => 'work.pages.inc',
   );
 
@@ -345,7 +365,6 @@ function work_new($type = '') {
   return entity_get_controller('work')->create($type);
 }
 
-
 /**
  * Deletes an work by ID.
  *
@@ -372,8 +391,6 @@ function work_delete_multiple($ids) {
   return entity_get_controller('work')->delete($ids);
 }
 
-
-
 /**
  * Implements hook_theme()
  */
@@ -385,3 +402,27 @@ function work_theme($existing, $type, $theme, $path) {
     ),
   );
 }
+
+
+//function work_form_alter(&$form, $form_state, $form_id) {
+////  $work_types = array_keys(work_types());
+//  if (preg_match('/^[A-Za-z]+_work_form$/i', $form_id)) {
+//    $work = $form['#work'];
+//    $terms = db_select('taxonomy_entity_index', 'a')
+//                ->fields('a', array('tid'))
+//                ->condition('entity_id', $work->id, '=')
+//                ->condition('entity_type', 'work', '=')
+//                ->execute()
+//                ->fetchAll();
+//
+//  }
+//  if (!empty($terms)) {
+//    foreach($terms as $term) {
+//      $term = taxonomy_term_load($term->tid);
+////      print_r($term); exit;
+//
+//    }
+//  }
+//
+//
+//}

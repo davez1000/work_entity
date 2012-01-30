@@ -72,7 +72,16 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
       db_ignore_slave();
 
       // Invoke hook_ENTITY_view() to allow modules to add their additions.
-      rules_invoke_all($this->entityType . '_delete', $work);
+      
+      // Invoke the hook. If rules is there, use the rule funtion so that a rules
+      // event is invoked too.
+      if (module_exists('rules')) {
+        rules_invoke_all($this->entityType . '_delete', $work);
+      }
+      else {
+        module_invoke_all($this->entityType . '_delete', $work);
+      }
+      
 
       // Invoke the more generic hook_entity_view() to allow the same.
       module_invoke_all('entity_delete', $work, $this->entityType);
@@ -136,20 +145,6 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
     try {
       global $user;
 
-      // If the entity has a priref but no id, check that there
-      // isn't an existing entity with the same priref.
-      if (empty($work->id) and !empty($work->priref)) {
-        
-        $id = db_select('work', 'ew')
-                    ->fields('ew', array('id'))
-                    ->condition('priref', $work->priref)
-                    ->execute()
-                    ->fetchAll();
-        
-        if (! empty($id[0]->id)) {
-          $work->id = $id[0]->id;
-        }
-      }
       // Determine if we will be inserting a new work.
       $work->is_new = empty($work->id);
 
@@ -165,6 +160,9 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
       // Give modules the opportunity to prepare field data for saving.
       field_attach_presave('work', $work);
 
+      // Set the enhanced flag on the work.
+      $work->enhanced = $this->checkEnhanced($work);
+      
       // When saving a new work revision, unset any existing $work->vid
       // to ensure a new revision will actually be created and store the old
       // revision ID in a separate property for work hook implementations.
@@ -176,10 +174,8 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
       // If this is a new work...
       if ($work->is_new) {
         
-        $work->webid = uniqid();
-        
         // Save the new work.
-        drupal_write_record('work', $work);
+        $ret = drupal_write_record('work', $work);
 
         // Save the alternative titles in the joined table.
         foreach ($work->alternative_titles as $title) {
@@ -194,7 +190,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
       }
       else {
         // Save the updated work.
-        drupal_write_record('work', $work, 'id');
+        $ret = drupal_write_record('work', $work, 'id');
 
         // Save the alternative titles.  Delete all the existing titles first
         db_delete('work_title')
@@ -216,7 +212,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
           $this->saveRevision($work, $user->uid, TRUE);
           $update_work = FALSE;
         }
-
+        
         $op = 'update';
       }
 
@@ -241,7 +237,8 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
       // propagated to the slave.
       db_ignore_slave();
 
-      return $work;
+      // return the value returned by drupal_write_record 
+      return $ret;
     }
     catch (Exception $e) {
       $transaction->rollback();
@@ -417,7 +414,6 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
     // Use the inherited load method to load the field from the standard
     // schema table.
     $works = parent::load($ids, $conditions);
-
     foreach ($works as &$work) {
       
       // Alternative titles are stored in a seperate table.  Load them here
@@ -428,43 +424,28 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
         ->execute()
         ->fetchAll();
       $work->alternative_titles = $alternative_titles;
-      
-      
-      // Get terms attached to this work, and add to the work object
-      $term_array = array();
-      $terms = db_select('taxonomy_term_data', 'ttd');
-      $terms->fields('ttd', array('name', 'tid'));
-      $terms->fields('tv', array('machine_name'));
-      $terms->innerJoin('taxonomy_entity_index', 'tei', 'tei.tid=ttd.tid');
-      $terms->innerJoin('taxonomy_vocabulary', 'tv', 'tv.vid=ttd.vid');
-      $terms->condition('tei.entity_type', 'work', '=');
-      $terms->condition('tei.entity_id', $work->id, '=');
-      $terms_result = $terms->execute()->fetchAll();
-      
-      // group terms by type and add links
-      if (!empty($terms_result)) {
-        $i = 0;
-        $grouped_terms = array();
-        foreach($terms_result as $term) {
-          $grouped_terms[$term->machine_name][$i] = array(
-            'name' => $term->name,
-            'tid' => $term->tid,
-            'link' => l($term->name, 'taxonomy/term/' . $term->tid),
-          );
-          $i++;
-        }
-      }
 
-      if (!empty($grouped_terms)) {
-        $work->terms = $grouped_terms;
-      }
-      
-      
-      
     }
     return $works;
-
   }
-
+  
+  /**
+   * A private function to check if a work has been enhanced in drupal.
+   *
+   * 'Enhanced' is currently defined as any work entity that has a value in any
+   * of the introduction,synopsis or one_liner fields.
+   */
+  private function checkEnhanced($work) {
+    if (! empty($work->introduction['und'])) {
+      return 1;
+    }
+    if (! empty($work->synopsis['und'])) {
+      return 1;
+    }
+    if (! empty($work->one_liner['und'])) {
+      return 1;
+    }
+    return 0;
+  }
 
 }

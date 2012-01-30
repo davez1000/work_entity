@@ -65,33 +65,55 @@ function work_form($form, &$form_state, $work) {
   // Common fields.
   $form['title'] = array(
     '#type' => 'textfield',
-    '#title' => t('Title'),
+    '#title' => t('Display title'),
     '#default_value' => $work->title,
     '#weight' => -5,
     '#required' => TRUE,
   );
+  $form['identifying_title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Identifying title'),
+    '#default_value' => $work->identifying_title,
+    '#weight' => -5,
+    '#required' => TRUE,
+    '#disabled' => TRUE,
+  );
   $form['alpha_title'] = array(
     '#type' => 'textfield',
     '#title' => t('Alphabetic title'),
+    '#description' => t('The title used for sorting the works.'),
     '#default_value' => $work->alpha_title,
     '#weight' => -4,
     '#required' => FALSE,
+    '#disabled' => TRUE,
   );
-  $form['priref'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Priref'),
-    '#default_value' => $work->priref,
-    '#weight' => -3,
-    '#required' => FALSE,
-  );
+  if (isset($work->alternative_titles)) {
+    if (! empty($work->alternative_titles)) {
+      $form['alternative_titles'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('Alternative titles'),
+        '#weight' => -3,
+      );
+      
+      foreach ($work->alternative_titles as $key => $alt_title) {
+        $form['alternative_titles']['title' . $key] = array(
+          '#type' => 'textfield',
+          '#title' => t($alt_title->type),
+          '#default_value' => $alt_title->title,
+          '#disabled' => TRUE,
+        );
+      }
+    }
+  }
   $form['production_date'] = array(
     '#type' => 'textfield',
     '#title' => t('Production date'),
+    '#description' => t('The production date for the work.'),
     '#default_value' => $work->production_date,
     '#weight' => -2,
     '#required' => FALSE,
+    '#disabled' => TRUE,
   );
-
   $form['revision'] = array(
     '#access' => user_access('administer works'),
     '#type' => 'checkbox',
@@ -144,14 +166,13 @@ function work_form_submit($form, &$form_state) {
   }
 
   $work->title = $form_state['values']['title'];
+  if (!empty($form_state['values']['identifying_title'])){
+    $work->identifying_title = $form_state['values']['identifying_title'];
+  }
   if (!empty($form_state['values']['alpha_title'])){
     $work->alpha_title = $form_state['values']['alpha_title'];
   }
-
-  if (!empty($form_state['values']['priref'])) {
-    $work->priref = $form_state['values']['priref'];
-  }
-
+  
   if (!empty($form_state['values']['production_date'])) {
     $work->production_date = $form_state['values']['production_date'];
   }
@@ -202,6 +223,7 @@ function work_page_view($work, $view_mode = 'full') {
   }
   else {
     // full view mode
+
     $work->content['title']['#markup'] = $work->title;
     
     $work->content['alpha_title']['#markup'] = $work->alpha_title;
@@ -233,17 +255,74 @@ function work_page_view($work, $view_mode = 'full') {
     }
     
     
-    // relations
-    $relations = module_invoke('relation_helper', 'get_endpoints', $work->id);
-    if (!empty($relations)) {
-      $i = 0;
-      foreach($relations as $relation) {
-        foreach($relation['entity'] as $relation_entity) {
-          $work->content['relations'][$relation['entity_type']][$i] = l($relation_entity->title, $relation['entity_type'] . '/' . $relation_entity->id);
-        }
-        $i++;
+    // additional field api fields
+    if (!empty($work->alternate_title)) {
+      $work->content['alternate_title'] = $work->alternate_title['und'][0]['value'];
+    }
+    
+    if (!empty($work->introduction)) {
+      if (!empty($work->introduction['und'][0]['summary'])) {
+        $work->content['introduction_summary'] = $work->introduction['und'][0]['summary'];
+      }
+      if (!empty($work->introduction['und'][0]['value'])) {
+        $work->content['introduction'] = $work->introduction['und'][0]['value'];
       }
     }
+    
+    if (!empty($work->synopsis)) {
+      $work->content['synopsis'] = $work->synopsis['und'][0]['value'];
+    }
+    
+    if (!empty($work->external_link)) {
+      $links = array();
+      foreach($work->external_link['und'] as $link) {
+        $links[] = l($link['title'], $link['url']);
+      }
+      $work->content['external_links'] = $links;
+    }
+    
+    if (!empty($work->one_liner)) {
+      $work->content['one_liner'] = $work->one_liner['und'][0]['value'];
+    }
+    
+    if (isset($work->primary_image['und'][0]['uri'])) {
+      $work->content['primary_image'] = $work->primary_image['und'][0]['uri'];
+    }
+    
+    if (!empty($work->year_term)) {
+      $term = taxonomy_term_load($work->year_term['und'][0]['tid']);
+      $work->content['year'] = l($term->name, 'taxonomy/term/' . $term->tid);
+    }
+    
+    if (!empty($work->work_category)) {
+      $term = taxonomy_term_load($work->work_category['und'][0]['tid']);
+      $work->content['work_category'] = l($term->name, 'taxonomy/term/' . $term->tid);
+    }
+    
+    // groups terms by type
+    if (isset($work->taxonomy_tids) && !empty($work->taxonomy_tids)) {
+      $terms = array();
+      foreach($work->taxonomy_tids as $tid) {
+        $term = taxonomy_term_load($tid);
+        $terms[$term->vocabulary_machine_name][] = l($term->name, 'taxonomy/term/' . $term->tid);
+      }
+      $work->content['terms'] = $terms;
+    }
+
+
+    // relations
+
+//    $relations = module_invoke('relation_helper', 'get_endpoints', $work->id, 'work');
+//
+//    if (!empty($relations)) {
+//      $i = 0;
+//      foreach($relations as $relation) {
+//        foreach($relation['entity'] as $relation_entity) {
+//          $work->content['relations'][$relation['entity_type']][$i] = l($relation_entity->title, $relation['entity_type'] . '/' . $relation_entity->id);
+//        }
+//        $i++;
+//      }
+//    }
   }
 
   // Build fields content.
@@ -331,4 +410,43 @@ function work_page_list_recent() {
   }
 
   return $content;
+}
+
+/**
+ * Menu callback; Displays a list of works.
+ */
+function work_page_list() {
+  
+  global $base_url;
+
+  $rows = array();
+
+  $header = array(
+    t('Title'),
+    t('Type'),
+    t('Edited'),
+  );
+
+  $query = db_select('work', 'w')
+    ->fields('w', array('id', 'type', 'title', 'changed'))
+    ->condition('enhanced', 1, '=')
+    ->execute();
+  
+  foreach ($query as $work) {
+
+    $cells = array();
+    $cells[] = l($work->title, $base_url . '/work/' . $work->id);
+    $cells[] = $work->type;
+    $cells[] = format_date($work->changed, 'short');
+    $rows[] = array('data' => $cells);
+  }
+  
+  $build['work_list_table'] = array(
+    '#theme' => 'table',
+    '#header' => $header,
+    '#rows' => $rows,
+    '#attributes' => array('id' => ''),
+    '#empty' => t('No works available.'),
+  );
+  return $build;
 }
