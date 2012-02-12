@@ -38,10 +38,10 @@ function work_entity_info() {
     $return['work']['bundles'][$type] = array(
       'label' => $info->name,
       'admin' => array(
-        'path' => 'admin/structure/works/manage/%work_type',
-        'real path' => 'admin/structure/works/manage/' . str_replace('_', '-', $type),
+        'path' => 'admin/dbo/works/manage/%work_type',
+        'real path' => 'admin/dbo/works/manage/' . str_replace('_', '-', $type),
         'bundle argument' => 4,
-        'access arguments' => array('administer work entities'),
+        'access arguments' => array('administer works'),
       ),
     );
   }
@@ -127,47 +127,7 @@ function work_permission() {
  * Implements hook_menu().
  */
 function work_menu() {
-  $items['admin/structure/works'] = array(
-    'title' => 'Manage works',
-    'description' => 'Manage works.',
-    'page callback' => 'work_overview_types',
-    'access arguments' => array('administer works'),
-    'file' => 'work.admin.inc',
-  );
-  $items['admin/structure/works/manage/%work_type'] = array(
-    'title' => 'View work type',
-    'title callback' => 'work_type_page_title',
-    'title arguments' => array(4),
-    'page callback' => 'work_information',
-    'page arguments' => array(4),
-    'access arguments' => array('administer works'),
-    'file' => 'work.admin.inc',
-  );
-  $items['admin/structure/works/manage/%work_type/view'] = array(
-    'title' => 'View',
-    'type' => MENU_DEFAULT_LOCAL_TASK,
-  );
-
-  $items['work/add'] = array(
-    'title' => 'Add new work',
-    'page callback' => 'work_add_page',
-    'access arguments' => array('create works'),
-    'weight' => 1,
-    'menu_name' => 'management',
-    'file' => 'work.pages.inc',
-  );
-  foreach (work_types() as $type) {
-    $type_url_str = str_replace('_', '-', $type->type);
-    $items['work/add/' . $type_url_str] = array(
-      'title' => $type->name,
-      'title callback' => 'check_plain',
-      'page callback' => 'work_add',
-      'page arguments' => array(2),
-      'access arguments' => array('create works'),
-      'description' => $type->description,
-      'file' => 'work.pages.inc',
-    );
-  }
+  // individual entity paths (view, edit, delete)
   $items['work/%work'] = array(
     'title callback' => 'work_page_title',
     'title arguments' => array(1),
@@ -202,19 +162,52 @@ function work_menu() {
     'context' => MENU_CONTEXT_INLINE,
     'file' => 'work.pages.inc',
   );
-  $items['work/recent'] = array(
-    'title' => 'Recently added works',
+  // Admin pages
+  $items['admin/dbo/works'] = array(
+    'title' => 'Works',
+    'description' => 'Work entities',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 50,
+    'file path' => drupal_get_path('module', 'system'),
+    'file' => 'system.admin.inc',
+  );
+  $items['admin/dbo/works/manage'] = array(
+    'title' => 'Manage works',
+    'page callback' => 'work_overview_types',
+    'access arguments' => array('administer works'),
+    'file' => 'work.admin.inc',
+  );
+  $items['admin/dbo/works/manage/%work_type'] = array(
+    'title' => 'View work type',
+    'title callback' => 'work_type_page_title',
+    'title arguments' => array(4),
+    'page callback' => 'work_information',
+    'page arguments' => array(4),
+    'access arguments' => array('administer works'),
+    'file' => 'work.admin.inc',
+  );
+  $items['admin/dbo/works/manage/%work_type/edit'] = array(
+    'title' => 'Edit',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  
+  // Work entity listings
+  $items['admin/dbo/works/recent'] = array(
+    'title' => 'Recent works',
+    'description' => 'View a list of recently imported works.',
     'page callback' => 'work_page_list_recent',
     'access arguments' => array('view works'),
     'file' => 'work.pages.inc',
   );
-  $items['work/list'] = array(
-    'title' => 'List works',
+  $items['admin/dbo/works/list'] = array(
+    'title' => 'Enhanced works',
+    'description' => 'View a list of all enhanced works.',
     'page callback' => 'work_page_list',
     'access arguments' => array('view works'),
     'file' => 'work.pages.inc',
   );
-
   return $items;
 }
 
@@ -403,26 +396,14 @@ function work_theme($existing, $type, $theme, $path) {
   );
 }
 
-
-//function work_form_alter(&$form, $form_state, $form_id) {
-////  $work_types = array_keys(work_types());
-//  if (preg_match('/^[A-Za-z]+_work_form$/i', $form_id)) {
-//    $work = $form['#work'];
-//    $terms = db_select('taxonomy_entity_index', 'a')
-//                ->fields('a', array('tid'))
-//                ->condition('entity_id', $work->id, '=')
-//                ->condition('entity_type', 'work', '=')
-//                ->execute()
-//                ->fetchAll();
-//
-//  }
-//  if (!empty($terms)) {
-//    foreach($terms as $term) {
-//      $term = taxonomy_term_load($term->tid);
-////      print_r($term); exit;
-//
-//    }
-//  }
-//
-//
-//}
+/**
+ * Implements hook_menu_alter().
+ *
+ * Disable the administration term listing pages for the 'cid_genre'
+ * [admin/structure/taxonomy/cid_genre] and 'subject'
+ * [admin/structure/taxonomy/subject] vocabularies.
+ */
+function work_menu_alter(&$items) {
+  $items['admin/structure/taxonomy/cid_genre']['access callback'] = FALSE;
+  $items['admin/structure/taxonomy/subject']['access callback'] = FALSE;
+}

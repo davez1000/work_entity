@@ -171,7 +171,7 @@ function work_schema() {
     'description' => 'The base table for work alternative titles.',
     'fields' => array(
       'wtid' => array(
-        'description' => 'The primary identifier for an work title.',
+        'description' => 'The primary identifier for the work title.',
         'type' => 'serial',
         'unsigned' => TRUE,
         'not null' => TRUE,
@@ -183,14 +183,14 @@ function work_schema() {
         'not null' => TRUE,
       ),
       'type' => array(
-        'description' => 'The {work_type} of this work.',
+        'description' => 'The type of this title.',
         'type' => 'varchar',
         'length' => 32,
         'not null' => TRUE,
         'default' => '',
       ),
       'title' => array(
-        'description' => 'The title of this work.',
+        'description' => 'The title.',
         'type' => 'varchar',
         'length' => 1024,
         'not null' => TRUE,
@@ -206,8 +206,61 @@ function work_schema() {
         ),
       ),
     ),
+    'indexes' => array(
+      'id' => array('id'),
+    ),
   );
 
+  // table for work descriptions (synopses etc)
+  $schema['work_description'] = array(
+    'description' => 'The base table for work descriptions.',
+    'fields' => array(
+      'wdid' => array(
+        'description' => 'The primary identifier for the work description.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'id' => array(
+        'description' => 'The primary identifier for the work.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The type of this description.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => '',
+      ),
+      'body' => array(
+        'description' => 'The description body.',
+        'type' => 'text',
+        'size' => 'medium',
+        'not null' => FALSE,
+      ),
+      'date' => array(
+        'description' => 'The date of this description.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+    ),
+    'primary key' => array('wdid'),
+    'foreign keys' => array(
+      'work' => array(
+        'table' => 'work',
+        'columns' => array(
+          'id' => 'id',
+        ),
+      ),
+    ),
+    'indexes' => array(
+      'id' => array('id'),
+    ),
+  );
   return $schema;
 }
 
@@ -236,7 +289,6 @@ function _work_install_taxonomy_vocabularies() {
       taxonomy_vocabulary_save($vocabulary);
     }
   }
-
 }
 
 /**
@@ -250,7 +302,6 @@ function work_install() {
   // install additional fields for work entity
   _work_install_instances();
 }
-
 
 /**
  * Implements hook_uninstall().
@@ -280,8 +331,20 @@ function work_uninstall() {
       }
     }
   }
-}
 
+  /**
+  * Delete field instances.
+  * Load all the instances attached to any bundle of the work entity, including
+  * inactive instances. Delete the instances, but don't delete the field 
+  * definitions as they are defined in the field_defintions module and should
+  * only be deleted when that module is uninstalled.
+  */
+  $instances = field_read_instances(array('entity_type' => 'work'), array('include_inactive' => TRUE));
+  foreach ($instances as $instance) {
+    field_delete_instance($instance, FALSE);
+  }
+  field_purge_batch(1000);
+}
 
 /**
  * Install additional fields for the work entity
@@ -404,15 +467,6 @@ function _work_install_instances() {
         ),
       ),
     ),
-    'year_term' => array(
-      'field_name' => 'year_term',
-      'label' => $t('Year tag'),
-      'required'    => FALSE,
-      'cardinality' => 1,
-      'widget' => array(
-        'type' => 'options_select',
-      ),
-    ),
     'work_category' => array(
       'field_name' => 'work_category',
       'label' => $t('Category'),
@@ -430,4 +484,26 @@ function _work_install_instances() {
       field_create_instance($instance);
     }
   }
+}
+
+/**
+ * Alters the work_title table to add an index
+ */
+function work_update_7000() {
+  db_query("ALTER TABLE {work_title} ADD INDEX id (id)");
+}
+
+/**
+ * Add a database table to store work descriptions.
+ */
+function work_update_7001() {
+  db_query("CREATE TABLE {work_description} (
+    `wdid` int(10) unsigned NOT NULL AUTO_INCREMENT COMMENT 'The primary identifier for the work description.',
+    `id` int(10) unsigned NOT NULL COMMENT 'The primary identifier for the work.',
+    `type` varchar(255) DEFAULT '' COMMENT 'The type of this description.',
+    `body` mediumtext COMMENT 'The description body.',
+    `date` varchar(32) DEFAULT NULL COMMENT 'The date of this description.',
+    PRIMARY KEY (`wdid`),
+    KEY `id` (`id`)
+  ) COMMENT='The base table for work descriptions.'");
 }
