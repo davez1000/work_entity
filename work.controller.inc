@@ -1,4 +1,5 @@
 <?php
+// $Id$
 
 /**
  * @file
@@ -35,7 +36,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
    *   TRUE on success, FALSE otherwise.
    */
   public function delete($ids, DatabaseTransaction $transaction = NULL) {
-    
+
     $works = $ids ? $this->load($ids) : FALSE;
     if (!$works) {
       // Do nothing, incase invalid or no ids have been passed.
@@ -86,7 +87,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
       else {
         module_invoke_all($this->entityType . '_delete', $work);
       }
-      
+
 
       // Invoke the more generic hook_entity_view() to allow the same.
       module_invoke_all('entity_delete', $work, $this->entityType);
@@ -178,7 +179,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
 
       // If this is a new work...
       if ($work->is_new) {
-        
+
         // Save the new work.
         $ret = drupal_write_record('work', $work);
 
@@ -216,7 +217,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
         // Save the work descriptions.
         // Delete any existing descriptions first
         db_delete('work_description')
-         ->condition('id', $work->id)
+          ->condition('id', $work->id)
           ->execute();
         // and save the new descriptions
         foreach ($work->descriptions as $description) {
@@ -234,7 +235,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
           $this->saveRevision($work, $user->uid, TRUE);
           $update_work = FALSE;
         }
-        
+
         $op = 'update';
       }
 
@@ -259,7 +260,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
       // propagated to the slave.
       db_ignore_slave();
 
-      // return the value returned by drupal_write_record 
+      // return the value returned by drupal_write_record
       return $ret;
     }
     catch (Exception $e) {
@@ -286,7 +287,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
     $work->uid = 1; // hard coded for import
     $temp_uid = $work->uid;
     $work->uid = $uid;
-    
+
     // Update the existing revision if specified.
     if ($update) {
       drupal_write_record('work_revision', $work, 'vid');
@@ -357,7 +358,7 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
     if (!empty($this->entityInfo['fieldable'])) {
       $entity->content += field_attach_view($this->entityType, $entity, $view_mode, $langcode);
     }
-    
+
     if (module_exists('rules')) {
       // Invoke hook_ENTITY_view() to allow modules to add their additions.
       rules_invoke_all($this->entityType . '_view', $entity, $view_mode, $langcode);
@@ -396,6 +397,10 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
    *   The renderable array.
    */
   public function view($entities, $view_mode = '', $langcode = NULL, $page = NULL) {
+
+    // Ensure that the array of entities is keyed by entity_id.
+    $entities = entity_key_array_by_property($entities, 'id');
+
     // If no view mode is specified, use the first one available..
     if (!isset($this->entityInfo['view modes'][$view_mode])) {
       reset($this->entityInfo['view modes']);
@@ -434,16 +439,16 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
   }
 
   public function load($ids = array(), $conditions = array()) {
-    
+
     // Use the inherited load method to load the field from the standard
     // schema table.
     $works = parent::load($ids, $conditions);
     foreach ($works as &$work) {
-      
+
       // Alternative titles are stored in a seperate table.  Load them here
       // and add to the work object.
       $alternative_titles = db_select('work_title', 'ewt')
-        ->fields('ewt')
+        ->fields('ewt', array('type', 'title'))
         ->condition('id', $work->id, '=')
         ->execute()
         ->fetchAll();
@@ -451,15 +456,31 @@ class workController extends DrupalDefaultEntityController implements EntityAPIC
 
       // Load the descriptions and add to the work object.
       $descriptions = db_select('work_description', 'wd')
-        ->fields('wd')
+        ->fields('wd', array('type', 'body', 'date'))
         ->condition('id', $work->id, '=')
         ->execute()
         ->fetchAll();
+
+      /**
+       * CID descriptions have hard linefeeds - removed single occurances of
+       * them and replace multiple occurances with a paragraph break.
+       */
+      foreach ($descriptions as &$description) {
+        // replace all linefeeds/carridge returns etc with <br /> tags
+        $linefeeds   = array("\r\n", "\n", "\r");
+        $replace = '<br />';
+        $description->body = str_replace($linefeeds, $replace, $description->body);
+        // replace multiple occurances of </ br> with </p><p>
+        $description->body = preg_replace('/(\s*<br\s*\/>\s*){2,}/', '</p><p>', $description->body);
+        // replace single occurances fo </br> with ' '
+        $description->body = '<p>' . str_replace('<br />', ' ', $description->body) . '</p>';
+      }
+
       $work->descriptions = $descriptions;
     }
     return $works;
   }
-  
+
   /**
    * A private function to check if a work has been enhanced in drupal.
    *

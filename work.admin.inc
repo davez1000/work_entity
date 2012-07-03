@@ -1,4 +1,9 @@
 <?php
+// $Id$
+
+/**
+ * @file
+ */
 
 /**
  * Menu callback; List all work types available.

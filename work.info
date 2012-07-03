@@ -1,12 +1,13 @@
 name = Work
 description = Provides an entity to store works (TV and film) imported from CID and creates taxonomies for genre and subject terms.
 core = 7.x
-package = dbo.org.uk core platform
+package = dbo core platform
 files[] = work.module
 files[] = work.pages.inc
 files[] = work.admin.inc
 files[] = work.install
 files[] = work.controller.inc
+files[] = work.services.inc
 dependencies[] = field_ui
 dependencies[] = entity
 dependencies[] = taxonomy

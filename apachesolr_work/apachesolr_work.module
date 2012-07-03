@@ -1,0 +1,376 @@
+<?php
+
+/**
+ * Implements hook_apachesolr_entity_info_alter()
+ */
+function apachesolr_work_apachesolr_entity_info_alter(&$entity_info) {
+  $entity_info['work']['indexable'] = TRUE;
+  $entity_info['work']['status callback'] = 'apachesolr_work_status_callback';
+  $entity_info['work']['document callback'][] = 'apachesolr_work_solr_document';
+  $entity_info['work']['reindex callback'] = 'apachesolr_work_solr_reindex';
+  $entity_info['work']['index_table'] = 'apachesolr_index_entities_work';
+}
+
+
+/**
+ * Status callback for ApacheSolr, for works
+ */
+function apachesolr_work_status_callback($product, $type) {
+  // Check on the status of the product if we have to index it or not
+  return TRUE;
+}
+
+/**
+ * Builds the user-specific information for a Solr document.
+ *
+ * @param ApacheSolrDocument $document
+ *   The Solr document we are building up.
+ * @param stdClass $entity
+ *   The entity we are indexing.
+ * @param string $entity_type
+ *   The type of entity we're dealing with.
+ */
+function apachesolr_work_solr_document(ApacheSolrDocument $document, $entity, $entity_type) {
+
+  $document->label = apachesolr_clean_text($entity->title);
+  $document->id = $entity_type . '_' . $entity->id;
+
+  $document->created = apachesolr_date_iso($entity->created);
+  
+  $documents = array();
+  $documents[] = $document;
+
+  return $documents;
+}
+
+
+/**
+ * Reindexing callback for ApacheSolr, for works.
+ */
+function apachesolr_work_solr_reindex($env_id) {
+//  $transaction = db_transaction();
+//  try {
+//    db_delete('apachesolr_index_entities_work')
+//      ->condition('entity_type', 'work')
+//      ->execute();
+//    $select = db_select('work', 'w');
+//    $select->addExpression("'work'", 'entity_type');
+//    $select->addField('w', 'id', 'entity_id');
+//    $select->addField('w', 'type', 'bundle');
+//    //$select->addField('w', 'status', 'status');
+//    $select->addExpression(REQUEST_TIME, 'changed');
+//    $select->condition('w.type', apachesolr_get_index_bundles($env_id, 'work'), 'IN');
+//    $select->condition('w.status', 1, '=');
+//    $select->range(0, 100);
+//    $results = $select->execute()->fetchAll();
+//
+//    $insert = db_insert('apachesolr_index_entities_work')->fields(array('entity_id', 'bundle', 'entity_type', 'changed'));
+//    foreach($results as $row) {
+//      $row = (array) $row;
+//      $insert->values($row);
+//    }
+//    $insert->execute();
+//  }
+//  catch (Exception $e) {
+//    $transaction->rollback();
+//    drupal_set_message($e->getMessage(), 'error');
+//    watchdog_exception('Apache Solr', $e);
+//    return FALSE;
+//  }
+//  return TRUE;
+}
+
+function apachesolr_work_apachesolr_index_document_build(ApacheSolrDocument $document, $entity, $entity_type, $env_id) { 
+  if ($entity_type == 'work') {
+    
+    // status
+    $document->addField('ss_work_status', $entity->status);
+    
+    // record completeness
+    $document->addField('ss_work_record_completeness', $entity->record_completeness);
+    
+    // introduction and summary
+    if (count($entity->introduction)) {
+      $document->addField('ts_work_introduction', $entity->introduction[LANGUAGE_NONE][0]['value']);
+      $document->addField('ts_work_introduction_summary', $entity->introduction[LANGUAGE_NONE][0]['summary']);
+    }
+    
+    
+    // synopsis
+    if (count($entity->synopsis)) {
+      $document->addField('ts_work_synopsis', $entity->synopsis[LANGUAGE_NONE][0]['value']);
+    }
+    
+    // title
+    if ($entity->title) {
+      $document->addField('ts_work_title', apachesolr_clean_text($entity->title), $entity->record_completeness);
+    }
+    
+    // identifying_title
+    if ($entity->identifying_title) {
+      $document->addField('ts_work_identifying_title', $entity->identifying_title, $entity->record_completeness);
+    }
+    
+    // alternative titles
+    $alternative_titles = db_select('work_title', 'wt')
+      ->fields('wt', array('title'))
+      ->condition('id', $entity->id)
+      ->execute()
+      ->fetchCol();
+    if ($alternative_titles) {
+      foreach ($alternative_titles as $alternative_title) {
+        $document->setMultiValue('sm_work_alternative_title', $alternative_title);
+      }
+    }
+    
+    // work descriptions
+    $work_descriptions = db_select('work_description', 'wd')
+      ->fields('wd', array('type', 'body', 'date'))
+      ->condition('id', $entity->id)
+      ->execute()
+      ->fetchAll();
+    if (count($work_descriptions)) {
+      foreach ($work_descriptions as $work_description) {
+        if (!is_null($work_description->body) || !$work_description->body) {
+          $document->setMultiValue('tm_work_description_body', $work_description->body);
+        }
+      }
+    }
+    
+    // terms
+    if (isset($entity->taxonomy_terms) && !empty($entity->taxonomy_terms)) {
+      foreach ($entity->taxonomy_terms as $vocab => $terms) {
+        foreach ($terms as $term) {
+          $document->setMultiValue('sm_work_' . $vocab, $term->name);
+          $document->setMultiValue('sm_work_' . $vocab . '_tids', $term->tid);
+        }
+      }
+    }
+    
+  }
+}
+
+function apachesolr_work_apachesolr_query_alter($query) {
+//function apachesolr_work_apachesolr_query_prepare($query) {
+  // fl adds it to the field list so the field becomes available in the results array, inside search-result.tpl.php
+  $query->addParam('fl', 'ss_work_status');
+  $query->addParam('qf', 'ss_work_status');
+  $query->addParam('fl', 'ss_work_record_completeness');
+  $query->addParam('qf', 'ss_work_record_completeness');
+  $query->addParam('fl', 'ts_work_introduction');
+  $query->addParam('qf', 'ts_work_introduction');
+  $query->addParam('fl', 'ts_work_introduction_summary');
+  $query->addParam('qf', 'ts_work_introduction_summary');
+  $query->addParam('fl', 'ts_work_synopsis');
+  $query->addParam('qf', 'ts_work_synopsis');
+  $query->addParam('fl', 'ts_work_title');
+  $query->addParam('qf', 'ts_work_title');
+  $query->addParam('fl', 'ts_work_identifying_title');
+  $query->addParam('qf', 'ts_work_identifying_title');
+  $query->addParam('fl', 'sm_work_alternative_title');
+  $query->addParam('qf', 'sm_work_alternative_title');
+  $query->addParam('fl', 'tm_work_description_body');
+  $query->addParam('qf', 'tm_work_description_body');
+  $query->addParam('fl', 'sm_work_cid_genre');
+  $query->addParam('qf', 'sm_work_cid_genre');
+  $query->addParam('fl', 'sm_work_subject');
+  $query->addParam('qf', 'sm_work_subject');
+  $query->addParam('fl', 'sm_work_years');
+  $query->addParam('qf', 'sm_work_years');
+  $query->addParam('fl', 'sm_work_countries');
+  $query->addParam('qf', 'sm_work_countries');
+  $query->addParam('fl', 'sm_work_cid_genre_tids');
+  $query->addParam('qf', 'sm_work_cid_genre_tids');
+  $query->addParam('fl', 'sm_work_subject_tids');
+  $query->addParam('qf', 'sm_work_subject_tids');
+  $query->addParam('fl', 'sm_work_years_tids');
+  $query->addParam('qf', 'sm_work_years_tids');
+  $query->addParam('fl', 'sm_work_countries_tids');
+  $query->addParam('qf', 'sm_work_countries_tids');
+}
+
+
+function apachesolr_work_preprocess_search_result(&$variables) {
+  $variables['result']['fields']['label'] = str_replace("&#039;", "'", $variables['result']['fields']['label']);
+  
+  // years
+  if (isset($variables['result']['fields']['sm_work_years_tids'])) {
+    $years = array();
+    foreach ($variables['result']['fields']['sm_work_years_tids'] as $key => $year_tid) {
+      $years[] = l($variables['result']['fields']['sm_work_years'][$key], 'taxonomy/term/' . $year_tid);
+    }
+    $variables['result']['fields']['terms_years'] = $years;
+  }
+  // cid_genre
+  if (isset($variables['result']['fields']['sm_work_cid_genre_tids'])) {
+    $genres = array();
+    foreach ($variables['result']['fields']['sm_work_cid_genre_tids'] as $key => $year_tid) {
+      $genres[] = l($variables['result']['fields']['sm_work_cid_genre'][$key], 'taxonomy/term/' . $year_tid);
+    }
+    $variables['result']['fields']['terms_genre'] = $genres;
+  }
+  // subject
+  if (isset($variables['result']['fields']['sm_work_subject_tids'])) {
+    $subjects = array();
+    foreach ($variables['result']['fields']['sm_work_subject_tids'] as $key => $year_tid) {
+      $subjects[] = l($variables['result']['fields']['sm_work_subject'][$key], 'taxonomy/term/' . $year_tid);
+    }
+    $variables['result']['fields']['terms_subject'] = $subjects;
+  }
+  // countries
+  if (isset($variables['result']['fields']['sm_work_countries_tids'])) {
+    $countries = array();
+    foreach ($variables['result']['fields']['sm_work_countries_tids'] as $key => $year_tid) {
+      $countries[] = l($variables['result']['fields']['sm_work_countries'][$key], 'taxonomy/term/' . $year_tid);
+    }
+    $variables['result']['fields']['terms_countries'] = $countries;
+  }
+
+}
+
+
+/**
+ * Implements hook_facetapi_facet_info()
+ */
+function apachesolr_work_facetapi_facet_info(array $searcher_info) {
+  $facets['solr_facet_work_genre'] = array(
+    'label' => t('Genre'),
+    'description' => t('Filter by Genre'),
+    'field' => 'sm_work_cid_genre_tids',
+    'field api name' => FALSE,
+    'map callback' => 'apachesolr_work_solr_facet_work_genre',
+    'dependency plugins' => array(),
+  );
+  $facets['solr_facet_work_subject'] = array(
+    'label' => t('Subject'),
+    'description' => t('Filter by Subject'),
+    'field' => 'sm_work_subject_tids',
+    'field api name' => FALSE,
+    'map callback' => 'apachesolr_work_solr_facet_work_subject',
+    'dependency plugins' => array(),
+  );
+  $facets['solr_facet_work_year'] = array(
+    'label' => t('Year'),
+    'description' => t('Filter by Year'),
+    'field' => 'sm_work_years_tids',
+    'field api name' => FALSE,
+    'map callback' => 'apachesolr_work_solr_facet_work_year',
+    'dependency plugins' => array(),
+  );
+  $facets['solr_facet_work_country'] = array(
+    'label' => t('Country'),
+    'description' => t('Filter by Country'),
+    'field' => 'sm_work_countries_tids',
+    'field api name' => FALSE,
+    'map callback' => 'apachesolr_work_solr_facet_work_country',
+    'dependency plugins' => array(),
+  );
+  return $facets;
+}
+
+function apachesolr_work_solr_facet_work_genre(array $values) {
+  $map = array();
+  $terms = taxonomy_term_load_multiple($values);
+  foreach ($terms as $term) {
+    $map[$term->tid] = entity_label('taxonomy_term', $term);
+  }
+  return $map;
+}
+
+function apachesolr_work_solr_facet_work_subject(array $values) {
+  $map = array();
+  $terms = taxonomy_term_load_multiple($values);
+  foreach ($terms as $term) {
+    $map[$term->tid] = entity_label('taxonomy_term', $term);
+  }
+  return $map;
+}
+
+function apachesolr_work_solr_facet_work_year(array $values) {
+  $map = array();
+  $terms = taxonomy_term_load_multiple($values);
+  foreach ($terms as $term) {
+    $map[$term->tid] = entity_label('taxonomy_term', $term);
+  }
+  return $map;
+}
+
+function apachesolr_work_solr_facet_work_country(array $values) {
+  $map = array();
+  $terms = taxonomy_term_load_multiple($values);
+  foreach ($terms as $term) {
+    $map[$term->tid] = entity_label('taxonomy_term', $term);
+  }
+  return $map;
+}
+
+/*
+ * Drush function for queueing content from the work table to the apachesolr_work table
+ */
+function _apachesolr_work_queue_content() {
+  $env_id = 'solr';
+  
+  db_delete('apachesolr_index_entities_work')
+    ->condition('entity_type', 'work')
+    ->execute();
+
+  // get number of items in work table
+  $result = db_select('work', 'w')
+              ->fields('w', array('id'))
+              ->execute();
+  $num_rows = $result->rowCount();
+
+  $batch = 1000;
+  $pages = ceil($num_rows / $batch);
+  for ($i = 1; $i <= $pages; $i++) {
+    $select = db_select('work', 'w');
+    $select->addExpression("'work'", 'entity_type');
+    $select->addField('w', 'id', 'entity_id');
+    $select->addField('w', 'type', 'bundle');
+//    $select->addField('w', 'status', 'status');
+    $select->addExpression(REQUEST_TIME, 'changed');
+    $select->condition('w.type', apachesolr_get_index_bundles($env_id, 'work'), 'IN');
+    $select->range(($i - 1) * $batch, $batch);
+    $results = $select->execute()->fetchAll();
+
+    $insert = db_insert('apachesolr_index_entities_work')->fields(array('entity_id', 'bundle', 'entity_type', 'changed'));
+    foreach($results as $row) {
+      $row = (array) $row;
+      $insert->values($row);
+    }
+    $insert->execute();
+    echo 'inserted page ' . $i . PHP_EOL;
+  }
+}
+
+
+/**
+ * Implements hook_preprocess_search_results()
+ */
+function apachesolr_work_preprocess_search_results(&$variables) {
+  // build the count numbers for displaying at the top of the search page, and also the pager.
+  $start = $variables['response']->response->start;
+  $total = $variables['response']->response->numFound;
+  $params = $variables['query']->getParams();
+  $to = $start + $params['rows'];
+  if ($to >= $total) {
+    $to = $total;
+  }
+  $variables['count_from'] = $start + 1;
+  $variables['count_to'] = $to;
+  $variables['count_total'] = $total;
+  
+  pager_default_initialize($total, $params['rows']);
+  
+  $variables['search_results'] .= theme('pager');
+}
+
+/**
+ * Implements hook_form_alter() 
+ */
+function apachesolr_work_form_alter(&$form, &$form_state, $form_id) {
+  // hide the search field on the search page
+  if ($form_id == 'apachesolr_search_custom_page_search_form' || $form_id == 'search_form') {
+    hide($form['basic']);
+  }
+}

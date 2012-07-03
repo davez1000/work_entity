@@ -1,0 +1,9 @@
+name = Apachesolr Work
+description = Indexes work content for use with Apachesolr
+package = dbo core platform
+version = 7.x-dev
+dependencies[] = apachesolr
+dependencies[] = work
+core = 7.x
+files[] = apachesolr_work.module
+files[] = apachesolr_work.install

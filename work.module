@@ -16,7 +16,7 @@ function work_entity_info() {
       'revision' => 'vid',
       'bundle' => 'type',
       'label' => 'title',
-     ),
+    ),
     'bundle keys' => array(
       'bundle' => 'type',
     ),
@@ -47,6 +47,310 @@ function work_entity_info() {
   }
 
   return $return;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function work_block_info() {
+  // subjects for the current work
+  $blocks['work_subjects'] = array(
+    'info' => t('Work subjects'),
+  );
+  $blocks['work_external_links'] = array(
+    'info' => t('Work external links'),
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view()
+ */
+function work_block_view($delta = '') {
+  // create the blocks
+  $blocks = array();
+
+  switch ($delta) {
+    // The subject terms that this work is tagged with
+    case 'work_subjects':
+      // retrieve the work entity from the menu item
+      $work_entity = menu_get_object('work');
+
+      if (isset($work_entity->taxonomy_terms['subject'])) {
+        $subjects = array();
+        foreach ($work_entity->taxonomy_terms['subject'] as $term) {
+          $subjects[] = l($term->name, 'taxonomy/term/' . $term->tid);
+        }
+        $blocks['subject'] = t('Subjects');
+        $blocks['content'] = theme('work_subjects', array('subjects' => $subjects));
+      }
+      break;
+    // The external links for the current work or agent (This block is shared
+    // by the agent module.)
+    case 'work_external_links':
+
+      // retrieve the current entity from the menu item
+      $entity = menu_get_object('work');
+      if (!$entity) {
+        $entity = menu_get_object('agent');
+      }
+
+      $links = array();
+      // IMDB and Wikipedia links
+      if (isset($entity->idents)) {
+        if (! empty($entity->idents->imdb)) {
+          if ($entity->idents->module == 'work') {
+            $links[] = l('The Internet Movie Database (IMDb)', 'http://www.imdb.com/title/' . $entity->idents->imdb);
+          }
+          elseif ($entity->idents->module == 'agent') {
+            $links[] = l('The Internet Movie Database (IMDb)', 'http://www.imdb.com/name/' . $entity->idents->imdb);
+          }
+
+        }
+        if (! empty($entity->idents->wikipedia)) {
+          $links[] = l('Wikipedia', 'http://en.wikipedia.org/wiki/' . $entity->idents->wikipedia);
+        }
+      }
+      // Other external links
+      if (!empty($entity->external_link)) {
+        foreach ($entity->external_link['und'] as $link) {
+          $links[] = l($link['title'], $link['url']);
+        }
+      }
+      if (! empty($links)) {
+        $blocks['subject'] = t('External links');
+        $blocks['content'] = theme('work_external_links', array('links' => $links));
+      }
+      break;
+  }
+  return $blocks;
+}
+
+/**
+ * Implementation of hook_entity_view().
+ */
+function work_entity_view($entity, $type, $view_mode = 'full', $langcode = NULL) {
+
+  if ($type != 'work') {
+    return $entity;
+  }
+
+  if ($view_mode == 'teaser') {
+    // title
+    $entity->content['title'] = array(
+      '#markup' => l(filter_xss($entity->title), 'work/' . $entity->id, array('html' => TRUE)) . '<br />',
+      '#weight' => -5,
+    );
+    // genres
+    if (isset($entity->taxonomy_terms['cid_genre'])) {
+      $genres = array();
+      foreach ($entity->taxonomy_terms['cid_genre'] as $term) {
+        $genres[] = l($term->name, 'taxonomy/term/' . $term->tid);
+      }
+      $entity->content['genre'] = array(
+        '#markup' => join(' / ', $genres),
+      );
+    }
+    // primary_image
+    if (isset($entity->primary_image[LANGUAGE_NONE][0]['uri'])) {
+      $entity->content['primary_image'] = array(
+        '#markup' => theme('image_style', array('style_name' => 'dbo_common_gallery_image', 'path' => render($entity->primary_image[LANGUAGE_NONE][0]['uri']))),
+      );
+    }
+
+    /**
+     * Summary - use the following fields in this order:
+     *  one-liner, introduction summary, first 255 characters of the
+     *  introduction body or first 255 chars of CID descriptions (Synopsis,
+     *  library synopsis or NFA catalogue).
+     */
+    $summary_str = NULL;
+    if (isset($entity->one_liner[LANGUAGE_NONE][0]['value'])) {
+      $summary_str = $entity->one_liner[LANGUAGE_NONE][0]['value'];
+    }
+    elseif(isset($entity->introduction[LANGUAGE_NONE][0]['summary'])) {
+      $summary_str = $entity->introduction[LANGUAGE_NONE][0]['summary'];
+    }
+    elseif(isset($entity->introduction[LANGUAGE_NONE][0]['value'])) {
+      $summary_str = $entity->introduction[LANGUAGE_NONE][0]['value'];
+    }
+    elseif(isset($entity->descriptions) && !empty($entity->descriptions)) {
+      $description_types = array('synopsis', 'library synopsis', 'nfa catalogue');
+      foreach ($description_types as $description_type) {
+        foreach ($entity->descriptions as $description) {
+          if (strtolower($description->type) == $description_type) {
+            $summary_str = $description->body;
+            break 2;
+          }
+        }
+      }
+    }
+    $summary_str_no_tags = strip_tags($summary_str);
+    if (strlen($summary_str_no_tags) > 255) {
+      $summary_str = substr($summary_str_no_tags, 0, 255) . '...';
+    }
+    $entity->content['summary'] = array(
+      '#markup' => $summary_str,
+    );
+  }
+
+  elseif ($view_mode == 'full') {
+    $entity->content['title']['#markup'] = $entity->title;
+
+    // Alternative titles
+    if (isset($entity->alternative_titles) && !empty($entity->alternative_titles)) {
+      $alt_t = array();
+      foreach ($entity->alternative_titles as $alternative_title) {
+        $alt_title_str = '<span class="type">' . $alternative_title->type . "</span>";
+        $alt_title_str .= '<span class="title">' . $alternative_title->title . "</span>";
+        $alt_t[] = $alt_title_str;
+      }
+      $alt_titles = '<ul class="alt-titles">' . PHP_EOL . '<li>' . implode($alt_t, '</li>' . PHP_EOL . '<li>') . '</li>' . PHP_EOL . '</ul>';
+      $entity->content['alternative_titles']['#markup'] = $alt_titles;
+    }
+
+    // Production date
+    if (isset($entity->production_date) && !empty($entity->production_date)) {
+      if (preg_match('/^(\d{4})\-(\d{2})\-(\d{2})$/', $entity->production_date, $matches)) {
+        $prod_date = date('j F Y', mktime(0, 0, 0, $matches[2], $matches[3], $matches[1]));
+      }
+      elseif (preg_match('/^(\d{4})$/', $entity->production_date, $matches)) {
+        $prod_date = $matches[1];
+      }
+      $entity->content['production_date']['#markup'] = $prod_date;
+    }
+
+    // Top-billed cast and credits
+    if (isset($entity->top_credits)) {
+      $top_credits = array();
+      if (! empty($entity->top_credits['direction'])) {
+        $top_credits[] = "Directed by " . implode(' / ', $entity->top_credits['direction']);
+      }
+      if (! empty($entity->top_credits['cast'])) {
+        $top_credits[] = "Featuring " . implode(' / ', $entity->top_credits['cast']);
+      }
+      $entity->content['top_cast'] = implode($top_credits, '<br />');
+    }
+
+    // Cast and credits
+    if (isset($entity->credits) && ! empty($entity->credits)) {
+      if (isset($entity->credits['credits'])) {
+        $credit_contents = array();
+        foreach ($entity->credits['credits'] as $credit_group => $credits) {
+          $credit_group_contents = array();
+          $credit_group_contents[] = '<h5>' . $credit_group . '</h5>';
+          $credit_group_contents[] = '<ul>';
+          foreach ($credits as $credit) {
+            if (!empty($credit->on_screen)) {
+              $role = $credit->on_screen;
+            }
+            else {
+              $role = $credit->role;
+            }
+            $credit_group_contents[] = '<li>';
+            $credit_group_contents[] = '<span class="credit-role">' . $role . '</span>';
+            $credit_string = l(t($credit->agent_name), 'agent/' . $credit->agent_id);
+            $credit_group_contents[] = '<span class="credit-agent">' . $credit_string . '</span>';
+            $credit_group_contents[] = '</li>';
+          }
+          $credit_group_contents[] = '</ul>';
+          $credit_contents[] = implode($credit_group_contents, PHP_EOL);
+        }
+        $entity->content['credits'] = implode($credit_contents, PHP_EOL);
+      }
+      if (isset($entity->credits['cast'])) {
+        $credit_contents = array();
+        foreach ($entity->credits['cast'] as $cast_group => $casts) {
+          $credit_group_contents = array();
+          $credit_group_contents[] = '<ul>';
+          foreach ($casts as $cast) {
+            if (!empty($cast->on_screen)) {
+              $role = $cast->on_screen;
+            }
+            else {
+              $role = $cast->role;
+            }
+            $credit_group_contents[] = '<li>';
+            $credit_group_contents[] = '<span class="credit-role">' . $role . '</span>';
+            $cast_string = l($cast->agent_name, 'agent/' . $cast->agent_id);
+            $credit_group_contents[] = '<span class="credit-agent">' . $cast_string . '</span>';
+            $credit_group_contents[] = '</li>';
+          }
+          $credit_group_contents[] = '</ul>';
+          $credit_contents[] = implode($credit_group_contents, PHP_EOL);
+        }
+        $entity->content['cast'] = implode($credit_contents, PHP_EOL);
+      }
+    }
+
+    /**
+     * Introduction / CID Descriptions.
+     * If an introduction has been created in drupal this should be used for
+     * introduction on the work page.  Failing an introduction, fallback to a
+     * CID description. Only one of the 'Synopsis', 'Library Synopsis' or 'NFA
+     * Catalogue' description types should be used in that order of preference.
+     */
+    if (isset($entity->introduction[LANGUAGE_NONE][0]['summary']) ||
+        isset($entity->introduction[LANGUAGE_NONE][0]['value'])
+       ) {
+      $entity->content['description']['#markup'] = "";
+      if (isset($entity->introduction[LANGUAGE_NONE][0]['summary'])) {
+        $entity->content['description']['#markup'] = $entity->introduction[LANGUAGE_NONE][0]['summary'];
+      }
+      if (isset($entity->introduction[LANGUAGE_NONE][0]['value'])) {
+        $entity->content['description']['#markup'] .= $entity->introduction[LANGUAGE_NONE][0]['value'];
+      }
+    }
+    elseif (isset($entity->descriptions) && !empty($entity->descriptions)) {
+      $description_types = array('synopsis', 'library synopsis', 'nfa catalogue');
+      foreach ($description_types as $description_type) {
+        foreach ($entity->descriptions as $description) {
+          if (strtolower($description->type) == $description_type) {
+            $entity->content['description']['#markup'] = $description->body;
+            break 2;
+          }
+        }
+      }
+    }
+    $entity->content['description']['#label_display'] = 'hidden';
+
+    // Additional field api fields
+    if (!empty($entity->synopsis)) {
+      $entity->content['synopsis']['#markup'] = $entity->synopsis[LANGUAGE_NONE][0]['value'];
+      $entity->content['synopsis']['#label_display'] = 'hidden';
+    }
+
+    /**
+     * If the work has been tagged with taxonomy terms, the terms will be in
+     * a taxonomy_terms property on the work object grouped by vocabulary and
+     * including any parent terms.
+     * These should be converted to markup ready to be dropped in a <ul> on the
+     * template.  Any child terms will be nested in <ul>s.
+     */
+    if (isset($entity->taxonomy_terms) && !empty($entity->taxonomy_terms)) {
+      $term_markup = array();
+      foreach ($entity->taxonomy_terms as $vocab => $terms) {
+        // get all parents for the current term and order from top parent down
+        foreach ($terms as $term) {
+          $term_markup[$vocab][] = l($term->name, 'taxonomy/term/' . $term->tid);
+        }
+      }
+      $entity->content['terms'] = $term_markup;
+    }
+
+    // record completeness
+    $scale = 590;
+    //print_r($entity); exit;
+    $record_completeness_value = $entity->record_completeness * 10;
+    if ($record_completeness_value > $scale) {
+      $record_completeness_value = $scale;
+    }
+    $remainder = round($scale - $record_completeness_value);
+    $entity->content['record_completness'] = $record_completeness_value;
+    $entity->content['record_completness_remainder'] = $remainder;
+
+  }
+  return $entity;
 }
 
 /**
@@ -120,6 +424,9 @@ function work_permission() {
     'delete works' =>  array(
       'title' => t('Delete work entities'),
     ),
+    'view api works' =>  array(
+      'title' => t('View a work via the api'),
+    ),
   );
 }
 
@@ -192,7 +499,7 @@ function work_menu() {
     'title' => 'Edit',
     'type' => MENU_DEFAULT_LOCAL_TASK,
   );
-  
+
   // Work entity listings
   $items['admin/dbo/works/recent'] = array(
     'title' => 'Recent works',
@@ -209,6 +516,17 @@ function work_menu() {
     'file' => 'work.pages.inc',
   );
   return $items;
+}
+
+/**
+* Implements hook_admin_paths().
+*/
+function work_admin_paths() {
+  $paths = array(
+    'work/*/edit' => TRUE,
+    'work/*/delete' => TRUE,
+  );
+  return $paths;
 }
 
 /**
@@ -385,13 +703,25 @@ function work_delete_multiple($ids) {
 }
 
 /**
- * Implements hook_theme()
+ * Implements hook_theme().
  */
 function work_theme($existing, $type, $theme, $path) {
   return array(
     'work' => array(
-      'variables' => array('element' => null),
+      'variables' => array('element' => NULL),
       'template' => 'work'
+    ),
+    'work_subjects' => array(
+      'arguments' => array(
+        'subjects' => NULL,
+      ),
+      'template' => 'work_subjects',
+    ),
+    'work_external_links' => array(
+      'arguments' => array(
+        'links' => NULL,
+      ),
+      'template' => 'work_external_links',
     ),
   );
 }
@@ -407,3 +737,63 @@ function work_menu_alter(&$items) {
   $items['admin/structure/taxonomy/cid_genre']['access callback'] = FALSE;
   $items['admin/structure/taxonomy/subject']['access callback'] = FALSE;
 }
+
+/**
+ * Implements hook_services_resources().
+ */
+function work_services_resources() {
+  return array(
+    'work' => array(
+      'retrieve' => array(
+        'help' => 'Retrieves a work',
+        'file' => array('file' => 'services.inc', 'module' => 'work'),
+        'callback' => '_work_retrieve',
+        'access callback' => '_work_access',
+        'access arguments' => array('view'),
+        'access arguments append' => TRUE,
+        'args' => array(
+          array(
+            'name' => 'id',
+            'type' => 'int',
+            'description' => 'The web_id of the work to get',
+            'source' => array('path' => '0'),
+            'optional' => FALSE,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+
+############ temporary code for removing lorem ipsum text from work introductions
+// run as:
+// drush eval "remove_lorem_from_works()"
+//
+function remove_lorem_from_works() {
+  // find all fds_work nodes that are not published, and get the matching work entity_id from the idents table,
+  // load the entities, remove biography and introduction, and re-save.
+  $entities = db_query("
+    SELECT n.nid, i.entity_id, i.module FROM {idents} i
+    INNER JOIN {node} n ON n.nid = i.nid
+    WHERE n.status = 0
+    AND i.entity_id <> ''
+    AND (i.module = 'work' OR i.module = 'agent')
+  ")->fetchAll();
+  if (count($entities)) {
+    foreach ($entities as $entity) {
+      $entity_load = entity_load($entity->module, array($entity->entity_id));
+      if (isset($entity_load[$entity->entity_id]->introduction)) {
+        $entity_load[$entity->entity_id]->introduction = array();
+      }
+      if (isset($entity_load[$entity->entity_id]->biography)) {
+        $entity_load[$entity->entity_id]->biography = array();
+      }
+      entity_save($entity->module, $entity_load[$entity->entity_id]);
+      $entity_load = entity_load($entity->module, array($entity->entity_id));
+
+      echo $entity->module . ': ' . $entity->entity_id . ' DONE' . PHP_EOL;
+    }
+  }
+}
+#################################################################################

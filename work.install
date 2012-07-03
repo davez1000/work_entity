@@ -1,4 +1,14 @@
 <?php
+// $Id$
+
+/**
+ * @file
+ * The install file for the work module.
+ *
+ * Provides schemas for the main, revisions, alternate titles and descriptions
+ * tables. Creates instances of field_api fields on the work entity. Creates
+ * the CID genre and subject taxonomies.
+ */
 
 function work_schema() {
   // main table for storing work entities
@@ -72,14 +82,64 @@ function work_schema() {
         'not null' => TRUE,
         'default' => 0,
       ),
+      'record_completeness' => array(
+        'description' => 'Score of record completeness.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'cid_created' => array(
+        'description' => 'The unix timestamp of the record creation in CID.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'cid_changed' => array(
+        'description' => 'The unix timestamp of the last edit in CID.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'status' => array(
+        'description' => 'Boolean indicating whether the work is published (visible to non-administrators).',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+      'level' => array(
+        'description' => 'The hierarchical level of this work (taken from CIDs worklevel_type field).',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => FALSE,
+        'default' => '',
+      ),
+      'promote' => array(
+        'description' => 'Boolean indicating whether the work should be displayed on the front page.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
     ),
     'unique keys' => array(
       'id_vid' => array('id', 'vid'),
       'id'     => array('id')
-      ),
+    ),
+    'indexes' => array(
+      'title' => array('title'),
+      'alpha_title' => array('alpha_title'),
+      'identifying_title' => array('identifying_title'),
+      'type' => array('type'),
+      'record_completeness' => array('record_completeness'),
+      'status' => array('status'),
+      'created' => array('created'),
+      'changed' => array('changed'),
+      'cid_created' => array('cid_created'),
+      'cid_changed' => array('cid_changed'),
+      'promoted' => array('promote'),
+    ),
     'primary key' => array('id'),
   );
-  
+
   // table for revisions
   $schema['work_revision'] = array(
     'description' => 'Stores information about each saved version of an {work}.',
@@ -151,11 +211,59 @@ function work_schema() {
         'not null' => TRUE,
         'default' => 0,
       ),
-    ),
-    'indexes' => array(
-      'id' => array('id'),
+      'record_completeness' => array(
+        'description' => 'Score of record completeness.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'cid_created' => array(
+        'description' => 'The unix timestamp of the record creation in CID.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'cid_changed' => array(
+        'description' => 'The unix timestamp of the last edit in CID.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'status' => array(
+        'description' => 'Boolean indicating whether the work is published (visible to non-administrators).',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+      'level' => array(
+        'description' => 'The hierarchical level of this work (taken from CIDs worklevel_type field).',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => FALSE,
+        'default' => '',
+      ),
+      'promote' => array(
+        'description' => 'Boolean indicating whether the work should be displayed on the front page.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
     ),
     'primary key' => array('vid'),
+    'indexes' => array(
+      'id' => array('id'),
+      'title' => array('title'),
+      'alpha_title' => array('alpha_title'),
+      'identifying_title' => array('identifying_title'),
+      'type' => array('type'),
+      'record_completeness' => array('record_completeness'),
+      'status' => array('status'),
+      'created' => array('created'),
+      'changed' => array('changed'),
+      'cid_created' => array('cid_created'),
+      'cid_changed' => array('cid_changed'),
+      'promoted' => array('promote'),
+    ),
     'foreign keys' => array(
       'work' => array(
         'table' => 'work',
@@ -268,10 +376,11 @@ function work_schema() {
  * Function to create the vocabularies defined by the module.
  */
 function _work_install_taxonomy_vocabularies() {
-  
+
   $vocabulary_names = array(
     'subject' => 'Subject',
     'cid_genre' => 'CID Genre',
+    'countries' => 'Countries'
   );
 
   foreach ($vocabulary_names as $vocabulary_machine_name => $vocabulary_name) {
@@ -293,7 +402,7 @@ function _work_install_taxonomy_vocabularies() {
 
 /**
  * Implements hook_install().
- * 
+ *
  * Creates all the vocabularies that the categories module defines and, where
  * appropriate, installs a set of predefined terms.
  */
@@ -312,9 +421,10 @@ function work_uninstall() {
   $vocabulary_names = array(
     'subject',
     'cid_genre',
+    'countries',
   );
 
-  $vocabularies = taxonomy_get_vocabularies();  
+  $vocabularies = taxonomy_get_vocabularies();
   foreach ($vocabularies as $vocabulary) {
     foreach ($vocabulary_names as $vocabulary_name) {
       if ($vocabulary->machine_name == $vocabulary_name) {
@@ -323,10 +433,10 @@ function work_uninstall() {
         $terms = array();
         foreach ($result as $row) {
           $terms[$row->tid] = taxonomy_term_load($row->tid);
-        }        
-        
+        }
+
         taxonomy_vocabulary_delete($vocabulary->vid);
-        
+
         field_purge_batch(1000);
       }
     }
@@ -335,7 +445,7 @@ function work_uninstall() {
   /**
   * Delete field instances.
   * Load all the instances attached to any bundle of the work entity, including
-  * inactive instances. Delete the instances, but don't delete the field 
+  * inactive instances. Delete the instances, but don't delete the field
   * definitions as they are defined in the field_defintions module and should
   * only be deleted when that module is uninstalled.
   */
@@ -467,19 +577,10 @@ function _work_install_instances() {
         ),
       ),
     ),
-    'work_category' => array(
-      'field_name' => 'work_category',
-      'label' => $t('Category'),
-      'required'    => TRUE,
-      'cardinality' => 1,
-      'widget' => array(
-        'type' => 'options_select',
-      ),
-    ),
   );
   foreach ($instances as $instance) {
     $instance['entity_type'] = 'work';
-    foreach(array_keys(work_types()) as $work_bundle) {
+    foreach (array_keys(work_types()) as $work_bundle) {
       $instance['bundle'] = $work_bundle;
       field_create_instance($instance);
     }
@@ -506,4 +607,219 @@ function work_update_7001() {
     PRIMARY KEY (`wdid`),
     KEY `id` (`id`)
   ) COMMENT='The base table for work descriptions.'");
+}
+
+/**
+ *  Removes the work_category field from the work entity_bundles.
+ */
+function work_update_7002() {
+
+  $instances_to_remove = array(
+    'work_category',
+  );
+
+ /**
+  * Delete field instances.
+  * Load all the instances attached to any bundle of the work entity, including
+  * inactive instances. Delete the instances, but don't delete the field
+  * definitions as they are defined in the field_defintions module and should
+  * only be deleted when that module is uninstalled.
+  */
+  $instances = field_read_instances(array('entity_type' => 'work'), array('include_inactive' => TRUE));
+  foreach ($instances as $instance) {
+    if (in_array($instance['field_name'], $instances_to_remove)) {
+      field_delete_instance($instance, FALSE);
+    }
+  }
+  field_purge_batch(1000);
+}
+
+/**
+ * Adds a record_completeness field to the work table schema
+ */
+function work_update_7003() {
+  db_add_field('work', 'record_completeness', array(
+    'description' => 'Score of record completeness.',
+    'type' => 'int',
+    'length' => 11,
+    'not null' => FALSE,
+    'default' => 0,
+    )
+  );
+}
+
+/**
+ * Adds a countries vocabulary to store CID country terms.
+ */
+function work_update_7004() {
+
+  $vocabulary_machine_name = "countries";
+  $vocabulary_name = "Countries";
+  $vocabulary_desc = t("A vocabulary of country terms imported from CID.");
+
+  $vocabulary = taxonomy_vocabulary_machine_name_load($vocabulary_machine_name);
+
+  if ($vocabulary) {
+    // a vocabulary called 'countries' already exists - throw an exception.
+    throw new DrupalUpdateException('A vocabulary with the name "countries" already exists.');
+  }
+  if (!$vocabulary) {
+    $edit = array(
+      'name' => $vocabulary_name,
+      'machine_name' => $vocabulary_machine_name,
+      'description' => $vocabulary_desc,
+      'hierarchy' => 1,
+      'module' => 'work',
+      'weight' => -10,
+    );
+    $vocabulary = (object) $edit;
+    taxonomy_vocabulary_save($vocabulary);
+  }
+}
+
+/**
+ * Adds fields for storing the CID created and edited dates to the work and
+ * work_revision tables.  Also adds the record completeness field to the
+ * work revision table (this was missed in update 7003).
+ */
+function work_update_7005() {
+
+  // add the 'record_completeness' field to the work_revision table.
+  db_add_field('work_revision', 'record_completeness', array(
+      'description' => 'Score of record completeness.',
+      'type' => 'int',
+      'length' => 11,
+      'not null' => FALSE,
+      'default' => 0,
+    )
+  );
+
+  // add the two new CID date fields to the two work tables.
+  $new_fields = array(
+    'cid_created' => array(
+      'description' => 'The unix timestamp of the record creation in CID.',
+      'type' => 'int',
+      'not null' => FALSE,
+      'default' => NULL,
+    ),
+    'cid_changed' => array(
+      'description' => 'The unix timestamp of the last edit in CID.',
+      'type' => 'int',
+      'not null' => FALSE,
+      'default' => NULL,
+    ),
+  );
+
+  $tables = array('work', 'work_revision');
+
+  foreach ($tables as $table) {
+    foreach ($new_fields as $field_name => $field) {
+      db_add_field($table, $field_name, $field);
+    }
+  }
+}
+
+/**
+ * Add a status field to the work and work_revision tables.
+ * Add indexes to the work and work_revision tables.
+ */
+function work_update_7006() {
+
+  $new_fields = array(
+    'status' => array(
+      'description' => 'Boolean indicating whether the work is published (visible to non-administrators).',
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 1,
+    ),
+  );
+
+  $tables = array('work', 'work_revision');
+
+  foreach ($tables as $table) {
+    foreach ($new_fields as $field_name => $field) {
+      db_add_field($table, $field_name, $field);
+    }
+  }
+
+  // add new indexes;
+  $indexes = array(
+    'title' => array('title'),
+    'alpha_title' => array('alpha_title'),
+    'identifying_title' => array('identifying_title'),
+    'type' => array('type'),
+    'record_completeness' => array('record_completeness'),
+    'status' => array('status'),
+    'created' => array('created'),
+    'changed' => array('changed'),
+    'cid_created' => array('cid_created'),
+    'cid_changed' => array('cid_changed'),
+  );
+
+  foreach ($tables as $table) {
+    foreach ($indexes as $index_name => $index_fields) {
+      db_add_index($table, $index_name, $index_fields);
+    }
+    // add a unique index to the vid field on each table
+    db_add_unique_key($table, 'vid', array('vid'));
+  }
+}
+
+/**
+ * Add a 'level' field to the work entity to store the worklevel_type field
+ * from CID.
+ */
+function work_update_7007() {
+
+  $new_fields = array(
+    'level' => array(
+      'description' => 'The hierarchical level of this work (taken from CIDs worklevel_type field).',
+      'type' => 'varchar',
+      'length' => 32,
+      'not null' => FALSE,
+      'default' => '',
+    ),
+  );
+
+  $tables = array('work', 'work_revision');
+
+  foreach ($tables as $table) {
+    foreach ($new_fields as $field_name => $field) {
+      db_add_field($table, $field_name, $field);
+    }
+  }
+}
+
+/**
+ * Add a promote field to the work and work_revision tables.
+ */
+function work_update_7008() {
+
+  // define the new field
+  $new_fields = array(
+    'promote' => array(
+      'description' => 'Boolean indicating whether the work should be displayed on the front page.',
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 0,
+    ),
+  );
+  // define the index
+  $indexes = array(
+    'promoted' => array('promote'),
+  );
+
+  $tables = array('work', 'work_revision');
+  // add the field.
+  foreach ($tables as $table) {
+    foreach ($new_fields as $field_name => $field) {
+      db_add_field($table, $field_name, $field);
+    }
+  }
+  // add the index.
+  foreach ($tables as $table) {
+    foreach ($indexes as $index_name => $index_fields) {
+      db_add_index($table, $index_name, $index_fields);
+    }
+  }
 }
